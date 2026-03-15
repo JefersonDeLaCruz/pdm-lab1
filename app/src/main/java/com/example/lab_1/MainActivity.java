@@ -2,10 +2,9 @@ package com.example.lab_1;
 
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
-import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -16,155 +15,150 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.example.lab_1.models.Moneda;
 import com.example.lab_1.models.Producto;
 import com.example.lab_1.models.Venta;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "VentaApp";
+
+    private Spinner spinnerProductos, spinnerMonedas;
+    private EditText etCantidad;
+    private TextView tvInfoProducto, tvTotalVenta, tvEquivalencia;
+    private Button btnAgregarVenta, btnConvertir;
+
+    private List<Producto> productos;
+    private List<Moneda> monedas;
+    private final List<Venta> ventasRealizadas = new ArrayList<>();
+    private double totalVentaDolares = 0.0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
+        
+        // Manejo de Insets para diseño Edge-to-Edge
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
 
-        spinnerProductos = findViewById(R.id.spinnerProductos);
-        spCurrency = findViewById(R.id.spinnerCurrency);
-
-        informacion = findViewById(R.id.txtInfo);
-        txtCantidad = findViewById(R.id.txtCantidad);
-        txtTotal = findViewById(R.id.txtTotal);
-        btnVenta = findViewById(R.id.btnAgregarVenta);
-        txtEquivalencia = findViewById(R.id.txtEquivalencia);
-
-        listaProductos = new ArrayList<>();
-
-        listaProductos.add(new Producto("Cemento", 8.50));
-        listaProductos.add(new Producto("Arena", 3.00));
-        listaProductos.add(new Producto("Ladrillo", 0.75));
-        listaProductos.add(new Producto("Varilla", 6.25));
-        listaProductos.add(new Producto("Pintura", 12.00));
-
-        adapter = new ArrayAdapter<>(this, androidx.appcompat.R.layout.support_simple_spinner_dropdown_item, listaProductos);
-
-        adapter.setDropDownViewResource(androidx.appcompat.R.layout.support_simple_spinner_dropdown_item);
-
-        spinnerProductos.setAdapter(adapter);
-
-
-        spinnerProductos.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                informacion.setText("Producto seleccionado: ");
-                producto = (Producto) parent.getItemAtPosition(position);
-                informacion.append(producto.toString());
-
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-
-            }
-        });
-
-        btnVenta.setOnClickListener( v -> {
-            int cantidad = 0;
-            try {
-                cantidad = Integer.parseInt(txtCantidad.getText().toString());
-            }catch (Exception e){
-                Log.i("CONVERSION", "ERROR AL INTENTAR CONVERTIR LA CANTIDAD A INT");
-            }
-
-            if(cantidad <= 0 ){
-                Toast.makeText(MainActivity.this, "Ingrese una cantidad valida \n(mayor o igual a cero)", Toast.LENGTH_SHORT).show();
-            }else{
-                listaVenta.add(new Venta(producto, cantidad));
-                Toast.makeText(MainActivity.this, "Venta agregada con exito", Toast.LENGTH_SHORT).show();
-            }
-
-
-            Log.i("LISTA_VENTAS", listaVenta.toString());
-//            int cantidadProductoActual = listaVenta.stream().mapToInt(Venta::getCantidad).sum();
-            double precioActualTotal = producto.getPrecio() * cantidad ;
-
-            nuevoTotal += precioActualTotal;
-            txtTotal.setText("Total de venta: " + String.valueOf(nuevoTotal));
-
-
-        });
-
-
-        listaMonedas = new ArrayList<>();
-        listaMonedas.add("Euro");
-        listaMonedas.add("MXN");
-        listaMonedas.add("Q");
-        adapterMonedas = new ArrayAdapter<>(this, androidx.appcompat.R.layout.support_simple_spinner_dropdown_item, listaMonedas);
-
-        spCurrency.setAdapter(adapterMonedas);
-
-
-        convertir = findViewById(R.id.btnConvert);
-
-
-        spCurrency.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                monedaActual = (String) parent.getItemAtPosition(position);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {
-
-            }
-        });
-
-        convertir.setOnClickListener(v -> {
-
-            if (monedaActual == "Euro"){
-
-                double nuevo = nuevoTotal / 1.08;
-                txtEquivalencia.setText(String.valueOf(nuevoTotal+ " dolares, equivale a: " + String.format("%.2f", nuevo) + " Euros"));
-            }else if (monedaActual == "MXN"){
-                double nuevo = nuevoTotal / 0.049;
-                txtEquivalencia.setText(String.valueOf(nuevoTotal+ " dolares, equivale a: " + String.format("%.2f", nuevo) + " MXN"));
-            }else{
-
-                double nuevo = nuevoTotal / 0.13;
-                txtEquivalencia.setText(String.valueOf(nuevoTotal+ " dolares, equivale a: " + String.format("%.2f", nuevo) + " QUETZALES"));
-            }
-
-        });
-
-
-
+        initViews();
+        setupData();
+        setupSpinners();
+        setupListeners();
     }
 
-    private HashMap<String, Double> equivalencias;
-    private TextView informacion;
-    private TextView txtEquivalencia;
-    private TextView txtCantidad;
-    private TextView txtTotal;
-    private Button btnVenta;
-    public static Producto producto = new Producto();
-    public static String monedaActual = "";
-    public static double nuevoTotal = 0;
-    public static ArrayList<Venta> listaVenta = new ArrayList<>();
-    private ArrayList<Producto> listaProductos;
-    private ArrayList<String> listaMonedas;
+    private void initViews() {
+        spinnerProductos = findViewById(R.id.spinnerProductos);
+        spinnerMonedas = findViewById(R.id.spinnerCurrency);
+        etCantidad = findViewById(R.id.txtCantidad);
+        tvInfoProducto = findViewById(R.id.txtInfo);
+        tvTotalVenta = findViewById(R.id.txtTotal);
+        tvEquivalencia = findViewById(R.id.txtEquivalencia);
+        btnAgregarVenta = findViewById(R.id.btnAgregarVenta);
+        btnConvertir = findViewById(R.id.btnConvert);
+    }
 
-    private ArrayAdapter<Producto> adapter;
-    private ArrayAdapter<String> adapterMonedas;
+    private void setupData() {
+        productos = new ArrayList<>();
+        productos.add(new Producto("Cemento", 8.50));
+        productos.add(new Producto("Arena", 3.00));
+        productos.add(new Producto("Ladrillo", 0.75));
+        productos.add(new Producto("Varilla", 6.25));
+        productos.add(new Producto("Pintura", 12.00));
 
-    private Spinner spinnerProductos;
-    private Spinner spCurrency;
+        monedas = new ArrayList<>();
+        monedas.add(new Moneda("Euro", 1.08));
+        monedas.add(new Moneda("Peso Mexicano", 0.049));
+        monedas.add(new Moneda("Quetzal", 0.13));
+    }
 
-    private Button convertir;
+    private void setupSpinners() {
+        ArrayAdapter<Producto> adapterProductos = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, productos);
+        adapterProductos.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerProductos.setAdapter(adapterProductos);
 
+        ArrayAdapter<Moneda> adapterMonedas = new ArrayAdapter<>(this,
+                android.R.layout.simple_spinner_item, monedas);
+        adapterMonedas.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinnerMonedas.setAdapter(adapterMonedas);
+    }
+
+    private void setupListeners() {
+        btnAgregarVenta.setOnClickListener(v -> procesarVenta());
+        btnConvertir.setOnClickListener(v -> realizarConversion());
+    }
+
+    private void procesarVenta() {
+        String strCantidad = etCantidad.getText().toString().trim();
+
+        // III. Validaciones de Entrada
+        if (strCantidad.isEmpty()) {
+            etCantidad.setError("Ingrese una cantidad");
+            return;
+        }
+
+        try {
+            int cantidad = Integer.parseInt(strCantidad);
+
+            if (cantidad <= 0) {
+                etCantidad.setError("La cantidad debe ser mayor a cero");
+                return;
+            }
+
+            // IV. Cálculo y Acumulación
+            Producto productoSeleccionado = (Producto) spinnerProductos.getSelectedItem();
+            Venta nuevaVenta = new Venta(productoSeleccionado, cantidad);
+            
+            ventasRealizadas.add(nuevaVenta);
+            totalVentaDolares += nuevaVenta.getSubtotal();
+
+            // V. Visualización de Resultados
+            tvInfoProducto.setText(String.format(Locale.getDefault(), 
+                    "Subtotal item: $%.2f", nuevaVenta.getSubtotal()));
+            tvTotalVenta.setText(String.format(Locale.getDefault(), 
+                    "Total acumulado: $%.2f", totalVentaDolares));
+            
+            etCantidad.setText("");
+            Toast.makeText(this, "Venta agregada con éxito", Toast.LENGTH_SHORT).show();
+
+            // VI. Trazabilidad (Logcat)
+            loguearVentas();
+
+        } catch (NumberFormatException e) {
+            etCantidad.setError("Ingrese un número válido");
+        }
+    }
+
+    private void realizarConversion() {
+        if (totalVentaDolares == 0) {
+            Toast.makeText(this, "Primero agregue alguna venta", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        // VII. Conversión de Monedas
+        Moneda monedaSeleccionada = (Moneda) spinnerMonedas.getSelectedItem();
+        double totalConvertido = monedaSeleccionada.convertirDesdeDolar(totalVentaDolares);
+
+        tvEquivalencia.setText(String.format(Locale.getDefault(),
+                "Total en %s: %.2f", 
+                monedaSeleccionada.getNombre(), totalConvertido));
+    }
+
+    private void loguearVentas() {
+        Log.i(TAG, "--- Listado de Productos Vendidos ---");
+        for (Venta v : ventasRealizadas) {
+            Log.i(TAG, v.toString());
+        }
+        Log.i(TAG, String.format(Locale.getDefault(), "TOTAL GENERAL: $%.2f", totalVentaDolares));
+    }
 }
