@@ -2,10 +2,10 @@ package com.example.lab_1;
 
 import android.os.Bundle;
 import android.util.Log;
-import android.view.View;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -20,154 +20,247 @@ import com.example.lab_1.models.Producto;
 import com.example.lab_1.models.Venta;
 
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Locale;
 
 public class MainActivity extends AppCompatActivity {
+
+    private static final String TAG = "LISTA_VENTAS";
+
+    private TextView informacion;
+    private TextView txtSubtotal;
+    private TextView txtTotal;
+    private TextView txtEquivalencia;
+    private EditText txtCantidad;
+    private Spinner spinnerProductos;
+    private Spinner spinnerCurrency;
+    private Button btnAgregarVenta;
+    private Button btnConvertir;
+
+    private ArrayAdapter<Producto> adapterProductos;
+    private ArrayAdapter<String> adapterMonedas;
+
+    private final ArrayList<Producto> listaProductos = new ArrayList<>();
+    private final ArrayList<Venta> listaVenta = new ArrayList<>();
+    private final LinkedHashMap<String, Double> equivalenciasDolarPorUnidad = new LinkedHashMap<>();
+
+    private Producto productoSeleccionado;
+    private String monedaSeleccionada;
+    private double totalVentaUsd = 0.0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
-        
-        // SUGERENCIA 1: El onCreate está haciendo TODO (inicializar UI, datos, listeners). 
-        // En Android, esto se llama "God Method". Es mejor separar en:
-        // initViews(), setupData() y setupListeners() para que sea legible.
-        
+
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom);
             return insets;
         });
 
+        initViews();
+        setupData();
+        setupListeners();
+        actualizarTotalesUI(0.0);
+    }
+
+    private void initViews() {
         spinnerProductos = findViewById(R.id.spinnerProductos);
-        spCurrency = findViewById(R.id.spinnerCurrency);
+        spinnerCurrency = findViewById(R.id.spinnerCurrency);
 
         informacion = findViewById(R.id.txtInfo);
-        txtCantidad = findViewById(R.id.txtCantidad);
+        txtSubtotal = findViewById(R.id.txtSubtotal);
         txtTotal = findViewById(R.id.txtTotal);
-        btnVenta = findViewById(R.id.btnAgregarVenta);
         txtEquivalencia = findViewById(R.id.txtEquivalencia);
+        txtCantidad = findViewById(R.id.txtCantidad);
 
-        listaProductos = new ArrayList<>();
+        btnAgregarVenta = findViewById(R.id.btnAgregarVenta);
+        btnConvertir = findViewById(R.id.btnConvert);
+    }
 
+    private void setupData() {
         listaProductos.add(new Producto("Cemento", 8.50));
         listaProductos.add(new Producto("Arena", 3.00));
         listaProductos.add(new Producto("Ladrillo", 0.75));
         listaProductos.add(new Producto("Varilla", 6.25));
         listaProductos.add(new Producto("Pintura", 12.00));
 
-        adapter = new ArrayAdapter<>(this, androidx.appcompat.R.layout.support_simple_spinner_dropdown_item, listaProductos);
-        adapter.setDropDownViewResource(androidx.appcompat.R.layout.support_simple_spinner_dropdown_item);
-        spinnerProductos.setAdapter(adapter);
+        adapterProductos = new ArrayAdapter<>(
+                this,
+                androidx.appcompat.R.layout.support_simple_spinner_dropdown_item,
+                listaProductos
+        );
+        adapterProductos.setDropDownViewResource(androidx.appcompat.R.layout.support_simple_spinner_dropdown_item);
+        spinnerProductos.setAdapter(adapterProductos);
 
-        spinnerProductos.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                informacion.setText("Producto seleccionado: ");
-                producto = (Producto) parent.getItemAtPosition(position);
-                informacion.append(producto.toString());
-            }
 
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
-        });
 
-        btnVenta.setOnClickListener( v -> {
-            int cantidad = 0;
-            
-            // SUGERENCIA 2: Usar try-catch para validar entrada es "costoso" y no da buen feedback.
-            // Mejor: if (txtCantidad.getText().toString().isEmpty()) { txtCantidad.setError("..."); return; }
-            try {
-                cantidad = Integer.parseInt(txtCantidad.getText().toString());
-            } catch (Exception e) {
-                Log.i("CONVERSION", "ERROR AL INTENTAR CONVERTIR LA CANTIDAD A INT");
-            }
+        if (!listaProductos.isEmpty()) {
+            productoSeleccionado = listaProductos.get(0);
+            mostrarProductoSeleccionado(productoSeleccionado);
+        }
 
-            if(cantidad <= 0 ) {
-                Toast.makeText(MainActivity.this, "Ingrese una cantidad valida \n(mayor o igual a cero)", Toast.LENGTH_SHORT).show();
-            } else {
-                listaVenta.add(new Venta(producto, cantidad));
-                Toast.makeText(MainActivity.this, "Venta agregada con exito", Toast.LENGTH_SHORT).show();
-            }
+        equivalenciasDolarPorUnidad.put("Euro (EUR)", 1.08);
+        equivalenciasDolarPorUnidad.put("Peso mexicano (MXN)", 0.049);
+        equivalenciasDolarPorUnidad.put("Quetzal (GTQ)", 0.13);
 
-            Log.i("LISTA_VENTAS", listaVenta.toString());
-            
-            // SUGERENCIA 3: Lógica de negocio en el Activity.
-            // El cálculo (precio * cantidad) debería estar dentro de la clase Venta como getSubtotal().
-            double precioActualTotal = producto.getPrecio() * cantidad ;
+        adapterMonedas = new ArrayAdapter<>(
+                this,
+                androidx.appcompat.R.layout.support_simple_spinner_dropdown_item,
+                new ArrayList<>(equivalenciasDolarPorUnidad.keySet())
+        );
+        adapterMonedas.setDropDownViewResource(androidx.appcompat.R.layout.support_simple_spinner_dropdown_item);
+        spinnerCurrency.setAdapter(adapterMonedas);
 
-            nuevoTotal += precioActualTotal;
-            
-            // SUGERENCIA 4: Concatenación de strings y String.valueOf().
-            // Es más limpio usar: String.format(Locale.getDefault(), "Total: $%.2f", nuevoTotal);
-            // Esto asegura que siempre veas 2 decimales (ej: $8.50 en vez de $8.5).
-            txtTotal.setText("Total de venta: " + String.valueOf(nuevoTotal));
-        });
-
-        listaMonedas = new ArrayList<>();
-        listaMonedas.add("Euro");
-        listaMonedas.add("MXN");
-        listaMonedas.add("Q");
-        adapterMonedas = new ArrayAdapter<>(this, androidx.appcompat.R.layout.support_simple_spinner_dropdown_item, listaMonedas);
-        spCurrency.setAdapter(adapterMonedas);
-
-        convertir = findViewById(R.id.btnConvert);
-
-        spCurrency.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            @Override
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) {
-                monedaActual = (String) parent.getItemAtPosition(position);
-            }
-
-            @Override
-            public void onNothingSelected(AdapterView<?> parent) {}
-        });
-
-        convertir.setOnClickListener(v -> {
-            // ERROR CRÍTICO 1: En Java, los Strings se comparan con .equals(), NO con ==.
-            // == compara si son el mismo objeto en memoria, .equals() compara el texto.
-            // if (monedaActual.equals("Euro")) { ... }
-            
-            // SUGERENCIA 5: Escalabilidad.
-            // Si te piden agregar 10 monedas más, tendrás un if/else gigante.
-            // Es mejor crear una clase Moneda(nombre, factor) y que el Spinner maneje objetos Moneda.
-            if (monedaActual == "Euro"){
-                double nuevo = nuevoTotal / 1.08;
-                txtEquivalencia.setText(String.valueOf(nuevoTotal+ " dolares, equivale a: " + String.format("%.2f", nuevo) + " Euros"));
-            } else if (monedaActual == "MXN"){
-                double nuevo = nuevoTotal / 0.049;
-                txtEquivalencia.setText(String.valueOf(nuevoTotal+ " dolares, equivale a: " + String.format("%.2f", nuevo) + " MXN"));
-            } else {
-                double nuevo = nuevoTotal / 0.13;
-                txtEquivalencia.setText(String.valueOf(nuevoTotal+ " dolares, equivale a: " + String.format("%.2f", nuevo) + " QUETZALES"));
-            }
-        });
+        if (adapterMonedas.getCount() > 0) {
+            monedaSeleccionada = adapterMonedas.getItem(0);
+        }
     }
 
-    private HashMap<String, Double> equivalencias;
-    private TextView informacion;
-    private TextView txtEquivalencia;
-    private TextView txtCantidad;
-    private TextView txtTotal;
-    private Button btnVenta;
-    
-    // ERROR CRÍTICO 2: Uso de 'static' para variables de estado de la Activity.
-    // 1. Causa fugas de memoria (Memory Leaks).
-    // 2. Si rotas la pantalla, la Activity se recrea pero los static NO. 
-    //    Si entras y sales de la App, el total se seguirá acumulando.
-    // SOLUCIÓN: Quita el 'static' y úsalas como variables de instancia (private Producto producto).
-    public static Producto producto = new Producto();
-    public static String monedaActual = "";
-    public static double nuevoTotal = 0;
-    public static ArrayList<Venta> listaVenta = new ArrayList<>();
-    
-    private ArrayList<Producto> listaProductos;
-    private ArrayList<String> listaMonedas;
-    private ArrayAdapter<Producto> adapter;
-    private ArrayAdapter<String> adapterMonedas;
-    private Spinner spinnerProductos;
-    private Spinner spCurrency;
-    private Button convertir;
+    private void setupListeners() {
+        spinnerProductos.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                productoSeleccionado = (Producto) parent.getItemAtPosition(position);
+                mostrarProductoSeleccionado(productoSeleccionado);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                productoSeleccionado = null;
+            }
+        });
+
+        spinnerCurrency.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(AdapterView<?> parent, android.view.View view, int position, long id) {
+                monedaSeleccionada = (String) parent.getItemAtPosition(position);
+            }
+
+            @Override
+            public void onNothingSelected(AdapterView<?> parent) {
+                monedaSeleccionada = null;
+            }
+        });
+
+        btnAgregarVenta.setOnClickListener(v -> agregarVenta());
+        btnConvertir.setOnClickListener(v -> convertirTotal());
+    }
+
+    private void agregarVenta() {
+        if (productoSeleccionado == null) {
+            Toast.makeText(this, "Seleccione un producto", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Integer cantidad = validarCantidad();
+        if (cantidad == null) {
+            return;
+        }
+
+        Venta venta = new Venta(productoSeleccionado, cantidad);
+        listaVenta.add(venta);
+
+        double subtotal = venta.getSubtotal();
+        totalVentaUsd += subtotal;
+
+        actualizarTotalesUI(subtotal);
+        imprimirVentasEnLogcat();
+
+        txtCantidad.setText("");
+        txtCantidad.clearFocus();
+        Toast.makeText(this, "Venta agregada con exito", Toast.LENGTH_SHORT).show();
+    }
+
+    private Integer validarCantidad() {
+        String texto = txtCantidad.getText().toString().trim();
+
+        if (texto.isEmpty()) {
+            txtCantidad.setError("La cantidad es obligatoria");
+            return null;
+        }
+
+        if (!texto.matches("\\d+")) {
+            txtCantidad.setError("Ingrese solo numeros enteros");
+            return null;
+        }
+
+        int cantidad;
+        try {
+            cantidad = Integer.parseInt(texto);
+        } catch (NumberFormatException ex) {
+            txtCantidad.setError("Numero invalido");
+            return null;
+        }
+
+        if (cantidad <= 0) {
+            txtCantidad.setError("La cantidad debe ser mayor que cero");
+            return null;
+        }
+
+        txtCantidad.setError(null);
+        return cantidad;
+    }
+
+    private void convertirTotal() {
+        if (totalVentaUsd <= 0) {
+            Toast.makeText(this, "Primero agregue al menos una venta", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (monedaSeleccionada == null) {
+            Toast.makeText(this, "Seleccione una moneda valida", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        Double dolarPorUnidad = equivalenciasDolarPorUnidad.get(monedaSeleccionada);
+        if (dolarPorUnidad == null || dolarPorUnidad <= 0) {
+            Toast.makeText(this, "No se encontro equivalencia para la moneda", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        double totalConvertido = totalVentaUsd / dolarPorUnidad;
+
+        txtEquivalencia.setText(String.format(
+                Locale.US,
+                "USD $%.2f equivalen a %.2f %s",
+                totalVentaUsd,
+                totalConvertido,
+                monedaSeleccionada
+        ));
+    }
+
+    private void mostrarProductoSeleccionado(Producto producto) {
+        informacion.setText(String.format(
+                Locale.US,
+                "Producto seleccionado: %s - USD $%.2f",
+                producto.getNombre(),
+                producto.getPrecio()
+        ));
+    }
+
+    private void actualizarTotalesUI(double subtotalProducto) {
+        txtSubtotal.setText(String.format(Locale.US, "Subtotal producto: USD $%.2f", subtotalProducto));
+        txtTotal.setText(String.format(Locale.US, "Total acumulado: USD $%.2f", totalVentaUsd));
+    }
+
+    private void imprimirVentasEnLogcat() {
+        StringBuilder sb = new StringBuilder("Ventas registradas:\n");
+
+        for (int i = 0; i < listaVenta.size(); i++) {
+            Venta venta = listaVenta.get(i);
+            sb.append(i + 1)
+                    .append(") ")
+                    .append(venta.getProducto().getNombre())
+                    .append(" x")
+                    .append(venta.getCantidad())
+                    .append(" -> USD $")
+                    .append(String.format(Locale.US, "%.2f", venta.getSubtotal()))
+                    .append('\n');
+        }
+
+        Log.i(TAG, sb.toString());
+    }
 }

@@ -28,10 +28,24 @@ public class Venta {
         this.cantidad = cantidad;
     }
 
+    public double getSubtotal() {
+        if (producto == null) {
+            return 0;
+        }
+        return producto.getPrecio() * cantidad;
+    }
+
     @Override
     public String toString() {
       StringBuilder sb = new StringBuilder("[Producto: ");
-      sb.append(this.producto).append(" | ").append("Cantidad: ").append(this.cantidad).append(" ]");
+      sb.append(this.producto)
+              .append(" | ")
+              .append("Cantidad: ")
+              .append(this.cantidad)
+              .append(" | ")
+              .append("Subtotal: $")
+              .append(String.format(java.util.Locale.US, "%.2f", getSubtotal()))
+              .append(" ]");
       return sb.toString();
     }
 }
